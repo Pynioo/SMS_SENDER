@@ -168,6 +168,7 @@ function AppContent({ onThemeChange }) {
     const [contacts, setContacts] = useState([]);
     const [groups, setGroups] = useState([]);
     const [templates, setTemplates] = useState([]);
+    const [scheduled, setScheduled] = useState([]);
     
     const [isLoading, setIsLoading] = useState(true);
     const [modal, setModal] = useState({ isOpen: false, type: '', data: null });
@@ -183,7 +184,7 @@ function AppContent({ onThemeChange }) {
             setCurrentUser(user);
             setIsLoading(false);
             if (user) {
-                const collections = { contacts: setContacts, groups: setGroups, templates: setTemplates };
+                const collections = { contacts: setContacts, groups: setGroups, templates: setTemplates, scheduled: setScheduled };
                 const unsubscribers = Object.entries(collections).map(([name, setter]) => 
                     onSnapshot(collection(db, 'shared_data', 'data', name), snapshot => {
                         setter(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
@@ -251,10 +252,11 @@ function AppContent({ onThemeChange }) {
     
     const renderView = () => {
         switch (activeView) {
-            case 'send': return <SendSmsView contacts={contacts} groups={groups} templates={templates} showToast={showToast} />;
+            case 'send': return <SendSmsView contacts={contacts} groups={groups} templates={templates} showToast={showToast} onSchedule={(data) => handleSaveData('scheduled', data)} />;
             case 'contacts': return <ContactsView data={contacts} onEdit={(c) => openModal('contact', c)} onDelete={(id) => handleDeleteRequest('contacts', id)} />;
             case 'groups': return <GroupsView groups={groups} contacts={contacts} onEdit={(g) => openModal('group', g)} onDelete={(id) => handleDeleteRequest('groups', id)} />;
             case 'templates': return <TemplatesView templates={templates} onEdit={(t) => openModal('template', t)} onDelete={(id) => handleDeleteRequest('templates', id)} />;
+            case 'scheduled': return <ScheduledView scheduled={scheduled} contacts={contacts} groups={groups} onDelete={(id) => handleDeleteRequest('scheduled', id)} />;
             default: return <Typography>Wybierz opcję z menu.</Typography>;
         }
     };
@@ -443,7 +445,18 @@ const SendSmsView = ({ contacts, groups, templates, showToast, onSchedule }) => 
         if (recipients.length === 0 || !message) return showToast('Wybierz odbiorców i wpisz treść wiadomości.', 'error');
         
         if (isScheduling) {
-            // Logika planowania pozostaje bez zmian
+            if (!scheduleDate || !scheduleTime) return showToast('Ustaw datę i godzinę wysyłki.', 'error');
+            const scheduledAt = new Date(`${scheduleDate}T${scheduleTime}`).toISOString();
+            if (new Date(scheduledAt) < new Date()) return showToast('Nie można zaplanować wysyłki w przeszłości.', 'error');
+            
+            const success = await onSchedule({ recipients, message, scheduledAt, status: 'pending' });
+            if (success) {
+                setRecipients([]);
+                setMessage('');
+                setIsScheduling(false);
+                setScheduleDate('');
+                setScheduleTime('');
+            }
         } else {
             handleRealSend();
         }
