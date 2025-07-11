@@ -17,7 +17,7 @@ import {
     Snackbar, Alert, CircularProgress, IconButton, Dialog, DialogActions, DialogContent, DialogContentText, DialogTitle
 } from '@mui/material';
 import {
-    Send, Book, Group, Message, Schedule, Add, Edit, Delete, Close, Menu as MenuIcon, Logout, Email, Lock
+    Send, Book, Group, Message, Schedule, Add, Edit, Delete, Menu as MenuIcon, Logout, Email, Lock, X as XIcon
 } from '@mui/icons-material';
 
 
@@ -66,7 +66,6 @@ const GroupForm = ({ onSave, onCancel, group, contacts }) => {
     const [name, setName] = useState(group?.name || '');
     const [selectedContacts, setSelectedContacts] = useState(group?.contacts || []);
     const [error, setError] = useState('');
-    const handleToggleContact = (contactId) => setSelectedContacts(prev => prev.includes(contactId) ? prev.filter(id => id !== contactId) : [...prev, contactId]);
     const handleSubmit = (e) => { e.preventDefault(); if (!name) return setError('Nazwa grupy jest wymagana.'); onSave({ id: group?.id, name, contacts: selectedContacts }); };
     return (<Box component="form" onSubmit={handleSubmit} sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
         <TextField label="Nazwa grupy" value={name} onChange={(e) => setName(e.target.value)} error={!!error} required fullWidth />
@@ -216,7 +215,10 @@ export default function App() {
             <Snackbar open={toast.open} autoHideDuration={6000} onClose={() => setToast(p => ({...p, open: false}))} anchorOrigin={{ vertical: 'top', horizontal: 'right' }}><Alert onClose={() => setToast(p => ({...p, open: false}))} severity={toast.severity} sx={{ width: '100%' }}>{toast.message}</Alert></Snackbar>
             <Modal open={modal.isOpen} onClose={closeModal}>
                 <Box sx={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', width: '90%', maxWidth: 500, bgcolor: 'background.paper', boxShadow: 24, p: 4, borderRadius: 2 }}>
-                    <Typography variant="h6" component="h2" mb={2}>{getModalTitle()}</Typography>
+                    <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+                        <Typography variant="h6" component="h2">{getModalTitle()}</Typography>
+                        <IconButton onClick={closeModal}><XIcon /></IconButton>
+                    </Box>
                     {renderModalContent()}
                 </Box>
             </Modal>
