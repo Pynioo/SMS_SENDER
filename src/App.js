@@ -5,12 +5,21 @@ import {
     onAuthStateChanged, 
     createUserWithEmailAndPassword, 
     signInWithEmailAndPassword, 
-    signOut
+    signOut 
 } from 'firebase/auth';
-import { getFirestore, collection, doc, addDoc, updateDoc, deleteDoc, onSnapshot, query } from 'firebase/firestore';
-import { 
-    Send, BookUser, Users, MessageSquareText, Clock, Plus, Trash2, Edit, X, ChevronDown, ChevronRight, CheckCircle, AlertCircle, Menu, LogOut, AtSign, Lock
-} from 'lucide-react';
+import { getFirestore, collection, doc, addDoc, updateDoc, deleteDoc, onSnapshot } from 'firebase/firestore';
+
+// Importowanie komponent√≥w i ikon z MUI (Material-UI)
+import {
+    Box, AppBar, Toolbar, Drawer, List, ListItem, ListItemButton, ListItemIcon, ListItemText,
+    Typography, Button, Card, CardHeader, CardContent, Modal, TextField, Checkbox,
+    Select, MenuItem, OutlinedInput, InputLabel, FormControl, Chip,
+    Snackbar, Alert, CircularProgress, IconButton, Dialog, DialogActions, DialogContent, DialogContentText, DialogTitle
+} from '@mui/material';
+import {
+    Send, Book, Group, Message, Schedule, Add, Edit, Delete, Close, Menu as MenuIcon, Logout, Email, Lock
+} from '@mui/icons-material';
+
 
 // --- KONFIGURACJA FIREBASE ---
 const firebaseConfig = {
@@ -23,80 +32,35 @@ const firebaseConfig = {
   measurementId: "G-9G6FE4L8P8"
 };
 
-// Inicjalizacja Firebase
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
 
-// --- KLASA DO OBS£UGI NUMER”W TELEFONU ---
+// --- KLASA DO OBS≈ÅUGI NUMER√ìW TELEFONU ---
 class PhoneNumberHz {
     constructor(rawNumber) {
-        if (typeof rawNumber !== 'string') throw new Error('Numer telefonu musi byÊ tekstem.');
+        if (typeof rawNumber !== 'string') throw new Error('Numer telefonu musi byƒá tekstem.');
         let cleanedNumber = rawNumber.replace(/[\s()+-]/g, '').replace(/^0+/, '');
-        if (cleanedNumber.length < 9 || cleanedNumber.length > 20) throw new Error('Nieprawid≥owa d≥ugoúÊ numeru telefonu.');
+        if (cleanedNumber.length < 9 || cleanedNumber.length > 20) throw new Error('Nieprawid≈Çowa d≈Çugo≈õƒá numeru telefonu.');
         if (cleanedNumber.length === 9) cleanedNumber = '48' + cleanedNumber;
         this.formattedNumber = cleanedNumber;
     }
     getNumber() { return this.formattedNumber; }
 }
 
-// --- G£”WNE KOMPONENTY UI ---
-const CCard = ({ children, className = '' }) => (<div className={`bg-white border border-gray-200 rounded-lg shadow-sm ${className}`}>{children}</div>);
-const CCardHeader = ({ children, className = '' }) => (<div className={`px-6 py-4 border-b border-gray-200 font-semibold text-gray-700 ${className}`}>{children}</div>);
-const CCardBody = ({ children, className = '' }) => (<div className={`p-6 ${className}`}>{children}</div>);
-const CButton = ({ children, onClick, color = 'primary', variant = 'solid', className = '', type = 'button', disabled = false }) => {
-    const baseClasses = 'px-4 py-2 rounded-md font-semibold text-sm inline-flex items-center justify-center transition-colors duration-150';
-    const colorClasses = {
-        solid: { primary: 'bg-blue-600 text-white hover:bg-blue-700 disabled:bg-blue-300', danger: 'bg-red-600 text-white hover:bg-red-700 disabled:bg-red-300', secondary: 'bg-gray-200 text-gray-800 hover:bg-gray-300 disabled:bg-gray-100' },
-        outline: { primary: 'border border-blue-600 text-blue-600 hover:bg-blue-50 disabled:text-gray-400 disabled:border-gray-300', danger: 'border border-red-600 text-red-600 hover:bg-red-50 disabled:text-gray-400 disabled:border-gray-300' }
-    };
-    return (<button type={type} onClick={onClick} disabled={disabled} className={`${baseClasses} ${colorClasses[variant][color]} ${className}`}>{children}</button>);
-};
-const Modal = ({ isOpen, onClose, title, children }) => {
-    if (!isOpen) return null;
-    return (<div className="fixed inset-0 bg-black bg-opacity-60 z-50 flex justify-center items-center p-4"><div className="bg-white rounded-lg shadow-xl w-full max-w-lg max-h-[90vh] flex flex-col"><div className="flex justify-between items-center p-4 border-b"><h3 className="text-lg font-semibold text-gray-800">{title}</h3><button onClick={onClose} className="text-gray-500 hover:text-gray-800 p-1 rounded-full hover:bg-gray-100"><X size={24} /></button></div><div className="p-6 overflow-y-auto">{children}</div></div></div>);
-};
-const ConfirmationModal = ({ isOpen, onClose, onConfirm, title, message }) => {
-    if (!isOpen) return null;
-    return (<Modal isOpen={isOpen} onClose={onClose} title={title}><p className="text-gray-600 mb-6">{message}</p><div className="flex justify-end space-x-3"><CButton onClick={onClose} color="secondary">Anuluj</CButton><CButton onClick={onConfirm} color="danger">Potwierdü</CButton></div></Modal>);
-};
-
-const Toast = ({ message, type, onDismiss }) => {
-    // POPRAWKA: Hak useEffect jest teraz wywo≥ywany bezwarunkowo na poczπtku komponentu.
-    useEffect(() => {
-        // Logika warunkowa zosta≥a przeniesiona do wnÍtrza haka.
-        if (message) {
-            const timer = setTimeout(() => onDismiss(), 4000);
-            return () => clearTimeout(timer);
-        }
-    }, [message, onDismiss]);
-
-    // Warunkowe renderowanie (early return) jest teraz PO wszystkich hakach.
-    if (!message) return null;
-
-    const styles = { 
-        success: { bg: 'bg-green-500', icon: <CheckCircle /> }, 
-        error: { bg: 'bg-red-500', icon: <AlertCircle /> } 
-    };
-    
-    return (
-        <div className="fixed top-5 right-5 z-50">
-            <div className={`${styles[type].bg} text-white rounded-lg shadow-lg p-4 flex items-center`}>
-                {styles[type].icon}
-                <span className="ml-3">{message}</span>
-            </div>
-        </div>
-    );
-};
-
-
 // --- KOMPONENTY FORMULARZY ---
 const ContactForm = ({ onSave, onCancel, contact }) => {
     const [formData, setFormData] = useState({ firstName: contact?.firstName || '', lastName: contact?.lastName || '', rawPhone: contact?.rawPhone || '' });
     const [error, setError] = useState('');
     const handleChange = (e) => setFormData(prev => ({ ...prev, [e.target.name]: e.target.value }));
-    const handleSubmit = (e) => { e.preventDefault(); setError(''); const { firstName, lastName, rawPhone } = formData; if (!firstName || !lastName || !rawPhone) return setError('Wszystkie pola sπ wymagane.'); try { const phoneNumber = new PhoneNumberHz(rawPhone); onSave({ id: contact?.id, firstName, lastName, phone: phoneNumber.getNumber(), rawPhone }); } catch (err) { setError(err.message); } };
-    return (<form onSubmit={handleSubmit} className="space-y-4">{['firstName', 'lastName', 'rawPhone'].map(field => { const labels = { firstName: 'ImiÍ', lastName: 'Nazwisko', rawPhone: 'Numer telefonu' }; return (<div key={field}><label className="block text-sm font-medium text-gray-700 mb-1">{labels[field]}</label><input type="text" name={field} value={formData[field]} onChange={handleChange} className="block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500" /></div>); })}{error && <p className="text-red-500 text-sm">{error}</p>}<div className="flex justify-end space-x-3 pt-4"><CButton onClick={onCancel} color="secondary">Anuluj</CButton><CButton type="submit" color="primary">Zapisz</CButton></div></form>);
+    const handleSubmit = (e) => { e.preventDefault(); setError(''); const { firstName, lastName, rawPhone } = formData; if (!firstName || !lastName || !rawPhone) return setError('Wszystkie pola sƒÖ wymagane.'); try { const phoneNumber = new PhoneNumberHz(rawPhone); onSave({ id: contact?.id, firstName, lastName, phone: phoneNumber.getNumber(), rawPhone }); } catch (err) { setError(err.message); } };
+    return (<Box component="form" onSubmit={handleSubmit} sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+        <TextField name="firstName" label="Imiƒô" value={formData.firstName} onChange={handleChange} error={!!error} required fullWidth />
+        <TextField name="lastName" label="Nazwisko" value={formData.lastName} onChange={handleChange} error={!!error} required fullWidth />
+        <TextField name="rawPhone" label="Numer telefonu" value={formData.rawPhone} onChange={handleChange} error={!!error} required fullWidth />
+        {error && <Typography color="error" variant="body2">{error}</Typography>}
+        <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 1, mt: 2 }}><Button onClick={onCancel}>Anuluj</Button><Button type="submit" variant="contained">Zapisz</Button></Box>
+    </Box>);
 };
 const GroupForm = ({ onSave, onCancel, group, contacts }) => {
     const [name, setName] = useState(group?.name || '');
@@ -104,14 +68,24 @@ const GroupForm = ({ onSave, onCancel, group, contacts }) => {
     const [error, setError] = useState('');
     const handleToggleContact = (contactId) => setSelectedContacts(prev => prev.includes(contactId) ? prev.filter(id => id !== contactId) : [...prev, contactId]);
     const handleSubmit = (e) => { e.preventDefault(); if (!name) return setError('Nazwa grupy jest wymagana.'); onSave({ id: group?.id, name, contacts: selectedContacts }); };
-    return (<form onSubmit={handleSubmit} className="space-y-4"><div><label className="block text-sm font-medium text-gray-700">Nazwa grupy</label><input type="text" value={name} onChange={(e) => setName(e.target.value)} className="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500" placeholder="np. ZespÛ≥ marketingowy" /></div><div><label className="block text-sm font-medium text-gray-700">Cz≥onkowie</label><div className="mt-2 max-h-60 overflow-y-auto border border-gray-300 rounded-md p-2 space-y-2">{contacts.length > 0 ? contacts.map(contact => (<div key={contact.id} className="flex items-center"><input type="checkbox" id={`contact-${contact.id}`} checked={selectedContacts.includes(contact.id)} onChange={() => handleToggleContact(contact.id)} className="h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500" /><label htmlFor={`contact-${contact.id}`} className="ml-3 text-sm text-gray-700">{contact.firstName} {contact.lastName} ({contact.phone})</label></div>)) : <p className="text-sm text-gray-500">Brak kontaktÛw do dodania.</p>}</div></div>{error && <p className="text-red-500 text-sm">{error}</p>}<div className="flex justify-end space-x-3 pt-4"><CButton onClick={onCancel} color="secondary">Anuluj</CButton><CButton type="submit" color="primary">Zapisz</CButton></div></form>);
+    return (<Box component="form" onSubmit={handleSubmit} sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+        <TextField label="Nazwa grupy" value={name} onChange={(e) => setName(e.target.value)} error={!!error} required fullWidth />
+        <FormControl fullWidth><InputLabel>Cz≈Çonkowie</InputLabel><Select multiple value={selectedContacts} onChange={(e) => setSelectedContacts(e.target.value)} input={<OutlinedInput label="Cz≈Çonkowie" />} renderValue={(selected) => (<Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>{selected.map(id => (<Chip key={id} label={contacts.find(c => c.id === id)?.firstName || '...'} />))}</Box>)}>{contacts.map(contact => (<MenuItem key={contact.id} value={contact.id}><Checkbox checked={selectedContacts.indexOf(contact.id) > -1} />{contact.firstName} {contact.lastName}</MenuItem>))}</Select></FormControl>
+        {error && <Typography color="error" variant="body2">{error}</Typography>}
+        <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 1, mt: 2 }}><Button onClick={onCancel}>Anuluj</Button><Button type="submit" variant="contained">Zapisz</Button></Box>
+    </Box>);
 };
 const TemplateForm = ({ onSave, onCancel, template }) => {
     const [name, setName] = useState(template?.name || '');
     const [content, setContent] = useState(template?.content || '');
     const [error, setError] = useState('');
-    const handleSubmit = (e) => { e.preventDefault(); if (!name || !content) return setError('Wszystkie pola sπ wymagane.'); onSave({ id: template?.id, name, content }); };
-    return (<form onSubmit={handleSubmit} className="space-y-4"><div><label className="block text-sm font-medium text-gray-700">Nazwa szablonu</label><input type="text" value={name} onChange={(e) => setName(e.target.value)} className="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500" placeholder="np. Przypomnienie o spotkaniu" /></div><div><label className="block text-sm font-medium text-gray-700">TreúÊ wiadomoúci</label><textarea value={content} onChange={(e) => setContent(e.target.value)} rows="4" className="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500" placeholder="Szanowni PaÒstwo, przypominamy o..."></textarea></div>{error && <p className="text-red-500 text-sm">{error}</p>}<div className="flex justify-end space-x-3 pt-4"><CButton onClick={onCancel} color="secondary">Anuluj</CButton><CButton type="submit" color="primary">Zapisz</CButton></div></form>);
+    const handleSubmit = (e) => { e.preventDefault(); if (!name || !content) return setError('Wszystkie pola sƒÖ wymagane.'); onSave({ id: template?.id, name, content }); };
+    return (<Box component="form" onSubmit={handleSubmit} sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+        <TextField label="Nazwa szablonu" value={name} onChange={(e) => setName(e.target.value)} error={!!error} required fullWidth />
+        <TextField label="Tre≈õƒá wiadomo≈õci" value={content} onChange={(e) => setContent(e.target.value)} multiline rows={4} error={!!error} required fullWidth />
+        {error && <Typography color="error" variant="body2">{error}</Typography>}
+        <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 1, mt: 2 }}><Button onClick={onCancel}>Anuluj</Button><Button type="submit" variant="contained">Zapisz</Button></Box>
+    </Box>);
 };
 
 // --- KOMPONENT LOGOWANIA ---
@@ -121,48 +95,22 @@ const AuthView = ({ showToast }) => {
     const [password, setPassword] = useState('');
     const [error, setError] = useState('');
     const [loading, setLoading] = useState(false);
+    const handleAuthAction = async (e) => { e.preventDefault(); setError(''); setLoading(true); try { if (isLogin) { await signInWithEmailAndPassword(auth, email, password); showToast('Zalogowano pomy≈õlnie!'); } else { await createUserWithEmailAndPassword(auth, email, password); showToast('Konto utworzone pomy≈õlnie!'); } } catch (err) { setError(err.message); showToast(err.message, 'error'); } finally { setLoading(false); } };
+    return (<Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '100vh', bgcolor: 'grey.100' }}><Card sx={{ maxWidth: 400, p: 2, width: '100%' }}><CardHeader title={isLogin ? 'Logowanie' : 'Rejestracja'} titleTypographyProps={{ align: 'center' }} /><CardContent><Box component="form" onSubmit={handleAuthAction} sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}><TextField type="email" label="Adres e-mail" value={email} onChange={e => setEmail(e.target.value)} required InputProps={{ startAdornment: <Email sx={{ mr: 1, color: 'action.active' }} /> }} /><TextField type="password" label="Has≈Ço" value={password} onChange={e => setPassword(e.target.value)} required InputProps={{ startAdornment: <Lock sx={{ mr: 1, color: 'action.active' }} /> }} />{error && <Typography color="error" variant="body2" align="center">{error}</Typography>}<Button type="submit" variant="contained" size="large" disabled={loading}>{loading ? <CircularProgress size={24} /> : (isLogin ? 'Zaloguj siƒô' : 'Zarejestruj siƒô')}</Button></Box><Button size="small" onClick={() => setIsLogin(!isLogin)} sx={{ mt: 2, textTransform: 'none' }}>{isLogin ? 'Nie masz konta? Zarejestruj siƒô' : 'Masz ju≈º konto? Zaloguj siƒô'}</Button></CardContent></Card></Box>);
+};
 
-    const handleAuthAction = async (e) => {
-        e.preventDefault();
-        setError('');
-        setLoading(true);
-        try {
-            if (isLogin) {
-                await signInWithEmailAndPassword(auth, email, password);
-                showToast('Zalogowano pomyúlnie!');
-            } else {
-                await createUserWithEmailAndPassword(auth, email, password);
-                showToast('Konto utworzone pomyúlnie!');
-            }
-        } catch (err) {
-            setError(err.message);
-            showToast(err.message, 'error');
-        } finally {
-            setLoading(false);
-        }
-    };
-    
+// --- KOMPONENT DIALOGU POTWIERDZENIA ---
+const ConfirmationDialog = ({ open, onClose, onConfirm, title, message }) => {
     return (
-        <div className="flex items-center justify-center min-h-screen bg-gray-100">
-            <div className="w-full max-w-md p-8 space-y-6 bg-white rounded-lg shadow-md">
-                <h2 className="text-2xl font-bold text-center text-gray-800">{isLogin ? 'Logowanie' : 'Rejestracja'}</h2>
-                <form onSubmit={handleAuthAction} className="space-y-6">
-                    <div className="relative"><AtSign className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={20}/><input type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="Adres e-mail" required className="w-full py-2 pl-10 pr-4 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"/></div>
-                    <div className="relative"><Lock className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={20}/><input type="password" value={password} onChange={e => setPassword(e.target.value)} placeholder="Has≥o" required className="w-full py-2 pl-10 pr-4 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"/></div>
-                    {error && <p className="text-sm text-red-600">{error}</p>}
-                    <div><CButton type="submit" color="primary" className="w-full" disabled={loading}>{loading ? 'Przetwarzanie...' : (isLogin ? 'Zaloguj siÍ' : 'Zarejestruj siÍ')}</CButton></div>
-                </form>
-                <div className="text-center">
-                    <button onClick={() => setIsLogin(!isLogin)} className="text-sm text-blue-600 hover:underline">
-                        {isLogin ? 'Nie masz konta? Zarejestruj siÍ' : 'Masz juø konto? Zaloguj siÍ'}
-                    </button>
-                </div>
-            </div>
-        </div>
+        <Dialog open={open} onClose={onClose}>
+            <DialogTitle>{title}</DialogTitle>
+            <DialogContent><DialogContentText>{message}</DialogContentText></DialogContent>
+            <DialogActions><Button onClick={onClose}>Anuluj</Button><Button onClick={onConfirm} color="error" autoFocus>Potwierd≈∫</Button></DialogActions>
+        </Dialog>
     );
 };
 
-// --- G£”WNY KOMPONENT APLIKACJI ---
+// --- G≈Å√ìWNY KOMPONENT APLIKACJI ---
 export default function App() {
     const [currentUser, setCurrentUser] = useState(null);
     const [activeView, setActiveView] = useState('send');
@@ -171,25 +119,27 @@ export default function App() {
     const [contacts, setContacts] = useState([]);
     const [groups, setGroups] = useState([]);
     const [templates, setTemplates] = useState([]);
-    const [scheduled, setScheduled] = useState([]);
     
     const [isLoading, setIsLoading] = useState(true);
     const [modal, setModal] = useState({ isOpen: false, type: '', data: null });
-    const [toast, setToast] = useState({ message: '', type: '' });
+    const [toast, setToast] = useState({ open: false, message: '', severity: 'success' });
     const [confirmation, setConfirmation] = useState({ isOpen: false, title: '', message: '', onConfirm: () => {} });
+
+    const drawerWidth = 220;
+    const collapsedDrawerWidth = 70;
 
     useEffect(() => {
         const authUnsubscribe = onAuthStateChanged(auth, user => {
             setCurrentUser(user);
             setIsLoading(false);
             if (user) {
-                const collections = { contacts: setContacts, groups: setGroups, templates: setTemplates, scheduled: setScheduled };
+                const collections = { contacts: setContacts, groups: setGroups, templates: setTemplates };
                 const unsubscribers = Object.entries(collections).map(([name, setter]) => 
                     onSnapshot(collection(db, 'shared_data', 'data', name), snapshot => {
                         setter(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
                     }, (error) => {
-                        console.error(`B≥πd nas≥uchiwacza dla '${name}':`, error);
-                        showToast("B≥πd uprawnieÒ. Sprawdü regu≥y bazy danych.", "error");
+                        console.error(`B≈ÇƒÖd nas≈Çuchiwacza dla '${name}':`, error);
+                        showToast("B≈ÇƒÖd uprawnie≈Ñ. Sprawd≈∫ regu≈Çy bazy danych.", "error");
                     })
                 );
                 return () => unsubscribers.forEach(unsub => unsub());
@@ -198,13 +148,13 @@ export default function App() {
         return () => authUnsubscribe();
     }, []);
 
-    const showToast = (message, type = 'success') => setToast({ message, type });
+    const showToast = (message, severity = 'success') => setToast({ open: true, message, severity });
     const openModal = (type, data = null) => setModal({ isOpen: true, type, data });
     const closeModal = () => setModal({ isOpen: false, type: '', data: null });
     const closeConfirmation = () => setConfirmation({ isOpen: false, title: '', message: '', onConfirm: () => {} });
 
     const handleSaveData = async (collectionName, data) => {
-        if (!currentUser) return showToast("B≥πd: Uøytkownik nie jest zalogowany.", "error");
+        if (!currentUser) return showToast("B≈ÇƒÖd: U≈ºytkownik nie jest zalogowany.", "error");
         try {
             const path = collection(db, 'shared_data', 'data', collectionName);
             const { id, ...restData } = data;
@@ -216,35 +166,23 @@ export default function App() {
                 showToast(`${collectionName.slice(0, -1)} dodany!`);
             }
             closeModal();
-        } catch (error) { showToast(`B≥πd podczas zapisu ${collectionName.slice(0, -1)}.`, 'error'); }
+        } catch (error) { showToast(`B≈ÇƒÖd podczas zapisu ${collectionName.slice(0, -1)}.`, 'error'); }
     };
     
     const handleDeleteRequest = (collectionName, id) => {
-        setConfirmation({ isOpen: true, title: 'Potwierdzenie usuniÍcia', message: 'Czy na pewno chcesz usunπÊ ten element? Tej operacji nie moøna cofnπÊ.', onConfirm: () => executeDelete(collectionName, id) });
+        setConfirmation({ isOpen: true, title: 'Potwierdzenie usuniƒôcia', message: 'Czy na pewno chcesz usunƒÖƒá ten element? Tej operacji nie mo≈ºna cofnƒÖƒá.', onConfirm: () => executeDelete(collectionName, id) });
     };
 
     const executeDelete = async (collectionName, id) => {
-        try { 
-            await deleteDoc(doc(db, 'shared_data', 'data', collectionName, id)); 
-            showToast('Element usuniÍty.'); 
-        } catch (error) { showToast('B≥πd podczas usuwania.', 'error'); }
+        try { await deleteDoc(doc(db, 'shared_data', 'data', collectionName, id)); showToast('Element usuniƒôty.'); } catch (error) { showToast('B≈ÇƒÖd podczas usuwania.', 'error'); }
         closeConfirmation();
-    };
-
-    const handleScheduleMessage = async (scheduleData) => {
-        if (!currentUser) return showToast("B≥πd: Uøytkownik nie jest zalogowany.", "error");
-        try { 
-            await addDoc(collection(db, 'shared_data', 'data', 'scheduled'), scheduleData); 
-            showToast('WiadomoúÊ zaplanowana!', 'success'); return true; 
-        } catch (error) { showToast('B≥πd planowania wiadomoúci.', 'error'); return false; }
     };
     
     const handleLogout = async () => {
-        try { await signOut(auth); showToast("Wylogowano pomyúlnie."); } catch (error) { showToast("B≥πd podczas wylogowywania.", "error"); }
+        try { await signOut(auth); showToast("Wylogowano pomy≈õlnie."); } catch (error) { showToast("B≈ÇƒÖd podczas wylogowywania.", "error"); }
     };
 
-    if (isLoading) return <div className="flex items-center justify-center h-screen">£adowanie...</div>;
-    
+    if (isLoading) return <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}><CircularProgress /></Box>;
     if (!currentUser) return <AuthView showToast={showToast} />;
 
     const renderModalContent = () => {
@@ -257,103 +195,117 @@ export default function App() {
     };
     
     const getModalTitle = () => {
-        const titles = { contact: 'kontakt', group: 'grupÍ', template: 'szablon' };
-        return modal.data ? `Edytuj ${titles[modal.type]}` : `UtwÛrz nowy ${titles[modal.type]}`;
+        const titles = { contact: 'kontakt', group: 'grupƒô', template: 'szablon' };
+        return modal.data ? `Edytuj ${titles[modal.type]}` : `Utw√≥rz nowy ${titles[modal.type]}`;
     };
     
     const renderView = () => {
         switch (activeView) {
-            case 'send': return <SendSmsView contacts={contacts} groups={groups} templates={templates} onSchedule={handleScheduleMessage} showToast={showToast} />;
-            case 'contacts': return <ContactsView contacts={contacts} onEdit={(c) => openModal('contact', c)} onDelete={(id) => handleDeleteRequest('contacts', id)} />;
+            case 'send': return <SendSmsView contacts={contacts} groups={groups} templates={templates} showToast={showToast} />;
+            case 'contacts': return <ContactsView data={contacts} onEdit={(c) => openModal('contact', c)} onDelete={(id) => handleDeleteRequest('contacts', id)} />;
             case 'groups': return <GroupsView groups={groups} contacts={contacts} onEdit={(g) => openModal('group', g)} onDelete={(id) => handleDeleteRequest('groups', id)} />;
             case 'templates': return <TemplatesView templates={templates} onEdit={(t) => openModal('template', t)} onDelete={(id) => handleDeleteRequest('templates', id)} />;
-            default: return <DashboardView />;
+            default: return <Typography>Wybierz opcjƒô z menu.</Typography>;
         }
     };
     
-    const viewTitles = { send: 'Wyúlij SMS', contacts: 'Ksiπøka adresowa', groups: 'Grupy odbiorcÛw', templates: 'Szablony wiadomoúci', scheduled: 'Zaplanowane wysy≥ki' };
-
-    const getHeaderAction = () => {
-        const actions = { contacts: { label: 'Dodaj kontakt', modal: 'contact' }, groups: { label: 'UtwÛrz grupÍ', modal: 'group' }, templates: { label: 'UtwÛrz szablon', modal: 'template' } };
-        const action = actions[activeView];
-        if (!action) return null;
-        return <CButton onClick={() => openModal(action.modal)} color="primary"><Plus size={16} className="mr-1" /> {action.label}</CButton>;
-    };
+    const viewTitles = { send: 'Wy≈õlij SMS', contacts: 'KsiƒÖ≈ºka adresowa', groups: 'Grupy odbiorc√≥w', templates: 'Szablony wiadomo≈õci', scheduled: 'Zaplanowane' };
 
     return (
-        <div className="flex h-screen bg-gray-100">
-            <Toast message={toast.message} type={toast.type} onDismiss={() => setToast({ message: '', type: '' })} />
-            <Modal isOpen={modal.isOpen} onClose={closeModal} title={getModalTitle()}>{renderModalContent()}</Modal>
-            <ConfirmationModal isOpen={confirmation.isOpen} onClose={closeConfirmation} onConfirm={confirmation.onConfirm} title={confirmation.title} message={confirmation.message} />
+        <Box sx={{ display: 'flex' }}>
+            <Snackbar open={toast.open} autoHideDuration={6000} onClose={() => setToast(p => ({...p, open: false}))} anchorOrigin={{ vertical: 'top', horizontal: 'right' }}><Alert onClose={() => setToast(p => ({...p, open: false}))} severity={toast.severity} sx={{ width: '100%' }}>{toast.message}</Alert></Snackbar>
+            <Modal open={modal.isOpen} onClose={closeModal}>
+                <Box sx={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', width: '90%', maxWidth: 500, bgcolor: 'background.paper', boxShadow: 24, p: 4, borderRadius: 2 }}>
+                    <Typography variant="h6" component="h2" mb={2}>{getModalTitle()}</Typography>
+                    {renderModalContent()}
+                </Box>
+            </Modal>
+            <ConfirmationDialog 
+                open={confirmation.isOpen} 
+                onClose={closeConfirmation} 
+                onConfirm={confirmation.onConfirm}
+                title={confirmation.title}
+                message={confirmation.message}
+            />
             
-            <aside className={`bg-[#3c4b64] text-white flex flex-col transition-all duration-300 ${isSidebarOpen ? 'w-64' : 'w-20'}`}>
-                <div className="h-16 flex items-center justify-center bg-[#344054] text-xl font-semibold">{isSidebarOpen ? 'SMS Sender' : 'SMS'}</div>
-                <nav className="flex-grow p-2 space-y-2">
+            <AppBar position="fixed" sx={{ zIndex: (theme) => theme.zIndex.drawer + 1 }}>
+                <Toolbar>
+                    <IconButton color="inherit" edge="start" onClick={() => setIsSidebarOpen(!isSidebarOpen)} sx={{ mr: 2 }}>
+                        <MenuIcon />
+                    </IconButton>
+                    <Typography variant="h6" noWrap component="div">
+                        {viewTitles[activeView] || 'SMS Sender'}
+                    </Typography>
+                </Toolbar>
+            </AppBar>
+            
+            <Drawer variant="permanent" open={isSidebarOpen} sx={{ width: isSidebarOpen ? drawerWidth : collapsedDrawerWidth, flexShrink: 0, '& .MuiDrawer-paper': { width: isSidebarOpen ? drawerWidth : collapsedDrawerWidth, transition: (theme) => theme.transitions.create('width', { easing: theme.transitions.easing.sharp, duration: theme.transitions.duration.enteringScreen }), boxSizing: 'border-box', overflowX: 'hidden' } }}>
+                <Toolbar />
+                <List>
                     {Object.keys(viewTitles).map(key => {
-                        const icons = { send: <Send size={20}/>, contacts: <BookUser size={20}/>, groups: <Users size={20}/>, templates: <MessageSquareText size={20}/>, scheduled: <Clock size={20}/> };
-                        return <NavItem key={key} icon={icons[key]} label={viewTitles[key]} isSidebarOpen={isSidebarOpen} isActive={activeView === key} onClick={() => setActiveView(key)} />;
+                        const icons = { send: <Send />, contacts: <Book />, groups: <Group />, templates: <Message />, scheduled: <Schedule /> };
+                        return (<ListItem key={key} disablePadding sx={{ display: 'block' }}><ListItemButton selected={activeView === key} onClick={() => setActiveView(key)} sx={{ minHeight: 48, justifyContent: 'initial', px: 2.5, '&.Mui-selected': { bgcolor: 'primary.main', color: 'white', '&:hover': { bgcolor: 'primary.dark' } } }}><ListItemIcon sx={{ minWidth: 0, mr: 3, justifyContent: 'center', color: 'inherit' }}>{icons[key]}</ListItemIcon><ListItemText primary={viewTitles[key]} sx={{ opacity: isSidebarOpen ? 1 : 0, transition: 'opacity 0.2s' }} /></ListItemButton></ListItem>);
                     })}
-                </nav>
-                <div className="p-2 border-t border-gray-700">
-                    <NavItem icon={<LogOut size={20}/>} label="Wyloguj" isSidebarOpen={isSidebarOpen} isActive={false} onClick={handleLogout} />
-                </div>
-                <div className="p-4 border-t border-gray-700 text-xs text-gray-400 break-words">
-                    <p className="font-semibold">Zalogowano jako:</p>
-                    <p>{currentUser.email}</p>
-                </div>
-            </aside>
+                </List>
+                <Box sx={{ flexGrow: 1 }} />
+                <List>
+                    <ListItem disablePadding sx={{ display: 'block' }}><ListItemButton onClick={handleLogout} sx={{ minHeight: 48, justifyContent: 'initial', px: 2.5 }}><ListItemIcon sx={{ minWidth: 0, mr: 3, justifyContent: 'center' }}><Logout /></ListItemIcon><ListItemText primary="Wyloguj" sx={{ opacity: isSidebarOpen ? 1 : 0 }} /></ListItemButton></ListItem>
+                </List>
+            </Drawer>
 
-            <div className="flex-1 flex flex-col">
-                <header className="h-16 bg-white border-b flex items-center justify-between px-6">
-                    <div className="flex items-center"><button onClick={() => setIsSidebarOpen(!isSidebarOpen)} className="text-gray-600 mr-4"><Menu size={24} /></button><h1 className="text-lg font-semibold text-gray-800">{viewTitles[activeView] || 'Panel'}</h1></div>
-                    <div className="flex items-center">{getHeaderAction()}</div>
-                </header>
-                <main className="flex-1 p-6 overflow-y-auto">{renderView()}</main>
-            </div>
-        </div>
+            <Box component="main" sx={{ flexGrow: 1, p: 3 }}>
+                <Toolbar />
+                <Box sx={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', mb: 2 }}>
+                    {activeView === 'contacts' && <Button variant="contained" startIcon={<Add />} onClick={() => openModal('contact')}>Dodaj kontakt</Button>}
+                    {activeView === 'groups' && <Button variant="contained" startIcon={<Add />} onClick={() => openModal('group')}>Utw√≥rz grupƒô</Button>}
+                    {activeView === 'templates' && <Button variant="contained" startIcon={<Add />} onClick={() => openModal('template')}>Utw√≥rz szablon</Button>}
+                </Box>
+                {renderView()}
+            </Box>
+        </Box>
     );
 }
 
-const NavItem = ({ icon, label, isSidebarOpen, isActive, onClick }) => (<button onClick={onClick} className={`w-full flex items-center p-3 rounded-lg transition-colors duration-200 ${isActive ? 'bg-blue-600 text-white' : 'hover:bg-[#4a5a78]'}`}>{icon}{isSidebarOpen && <span className="ml-4">{label}</span>}</button>);
-
-const DashboardView = () => (<CCard><CCardHeader>Witaj w panelu SMS Sender</CCardHeader><CCardBody><p>Wybierz jednπ z opcji w menu po lewej stronie, aby rozpoczπÊ pracÍ.</p></CCardBody></CCard>);
-const ContactsView = ({ contacts, onEdit, onDelete }) => (<CCard><CCardHeader>Lista kontaktÛw</CCardHeader><CCardBody><div className="overflow-x-auto"><table className="w-full text-sm text-left text-gray-600"><thead className="text-xs text-gray-700 uppercase bg-gray-50"><tr><th className="px-6 py-3">ImiÍ i Nazwisko</th><th className="px-6 py-3">Numer telefonu</th><th className="px-6 py-3 text-right">Akcje</th></tr></thead><tbody>{contacts.map(contact => (<tr key={contact.id} className="bg-white border-b hover:bg-gray-50"><td className="px-6 py-4 font-medium text-gray-900">{contact.firstName} {contact.lastName}</td><td className="px-6 py-4 font-mono">{contact.phone}</td><td className="px-6 py-4 text-right space-x-2"><CButton onClick={() => onEdit(contact)} color="primary" variant="outline" className="p-2"><Edit size={16} /></CButton><CButton onClick={() => onDelete(contact.id)} color="danger" variant="outline" className="p-2"><Trash2 size={16} /></CButton></td></tr>))}</tbody></table>{contacts.length === 0 && <p className="text-center text-gray-500 py-8">Brak kontaktÛw w ksiπøce adresowej.</p>}</div></CCardBody></CCard>);
+// --- KOMPONENTY WIDOK√ìW ---
+const ContactsView = ({ data, onEdit, onDelete }) => (
+    <Card><CardHeader title="Lista kontakt√≥w" /><CardContent>
+        {data.length === 0 ? <Typography align="center" p={4}>Brak kontakt√≥w.</Typography> :
+        <Box sx={{ overflowX: 'auto' }}>
+            <table style={{width: "100%", borderCollapse: "collapse"}}>
+                <thead><tr><th style={{padding: "8px", textAlign: "left"}}>Imiƒô i Nazwisko</th><th style={{padding: "8px", textAlign: "left"}}>Numer telefonu</th><th style={{padding: "8px", textAlign: "right"}}>Akcje</th></tr></thead>
+                <tbody>{data.map(contact => (<tr key={contact.id} style={{borderTop: "1px solid #eee"}}>
+                    <td style={{padding: "8px"}}>{contact.firstName} {contact.lastName}</td>
+                    <td style={{padding: "8px"}}>{contact.phone}</td>
+                    <td style={{padding: "8px", textAlign: "right"}}><IconButton onClick={() => onEdit(contact)}><Edit /></IconButton><IconButton onClick={() => onDelete(contact.id)}><Delete /></IconButton></td>
+                </tr>))}</tbody>
+            </table>
+        </Box>}
+    </CardContent></Card>
+);
 const GroupsView = ({ groups, contacts, onEdit, onDelete }) => {
-    const [expandedGroupId, setExpandedGroupId] = useState(null);
-    const getContactName = (contactId) => contacts.find(c => c.id === contactId)?.firstName + ' ' + contacts.find(c => c.id === contactId)?.lastName || 'Nieznany';
-    return (<div className="space-y-4">{groups.length > 0 ? groups.map(group => (<CCard key={group.id}><div className="p-4 flex justify-between items-center"><button className="flex items-center text-left w-full" onClick={() => setExpandedGroupId(expandedGroupId === group.id ? null : group.id)}>{expandedGroupId === group.id ? <ChevronDown size={20} className="mr-3" /> : <ChevronRight size={20} className="mr-3" />}<h3 className="font-semibold text-lg text-gray-800">{group.name}</h3><span className="ml-4 text-sm text-gray-500 bg-gray-100 px-2 py-1 rounded-full">{group.contacts?.length || 0} cz≥onkÛw</span></button><div className="flex space-x-2 flex-shrink-0 ml-4"><CButton onClick={(e) => { e.stopPropagation(); onEdit(group); }} color="primary" variant="outline" className="p-2"><Edit size={18} /></CButton><CButton onClick={(e) => { e.stopPropagation(); onDelete(group.id); }} color="danger" variant="outline" className="p-2"><Trash2 size={18} /></CButton></div></div>{expandedGroupId === group.id && (<div className="border-t p-6"><h4 className="font-semibold mb-2 text-gray-700">Cz≥onkowie grupy:</h4><ul className="list-disc list-inside space-y-1 text-gray-600">{group.contacts?.length > 0 ? group.contacts.map(contactId => (<li key={contactId}>{getContactName(contactId)}</li>)) : <li className="text-gray-400">Brak cz≥onkÛw w tej grupie.</li>}</ul></div>)}</CCard>)) : (<CCard><CCardBody><p className="text-center text-gray-500 py-8">Brak grup. Kliknij "UtwÛrz grupÍ", aby dodaÊ pierwszπ.</p></CCardBody></CCard>)}</div>);
+    const getContactName = (id) => contacts.find(c => c.id === id)?.firstName + ' ' + contacts.find(c => c.id === id)?.lastName || 'Nieznany';
+    return (<Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+        {groups.length === 0 ? <Card><CardContent><Typography align="center" p={4}>Brak grup.</Typography></CardContent></Card> :
+        groups.map(group => (<Card key={group.id}><CardHeader title={group.name} subheader={`${group.contacts?.length || 0} cz≈Çonk√≥w`} action={<><IconButton onClick={() => onEdit(group)}><Edit /></IconButton><IconButton onClick={() => onDelete(group.id)}><Delete /></IconButton></>} /><CardContent><Typography>Cz≈Çonkowie: {group.contacts?.map(getContactName).join(', ')}</Typography></CardContent></Card>))}
+    </Box>);
 };
-const TemplatesView = ({ templates, onEdit, onDelete }) => (<div className="space-y-4">{templates.length > 0 ? templates.map(template => (<CCard key={template.id}><CCardHeader>{template.name}</CCardHeader><CCardBody><p className="text-gray-600 italic">"{template.content}"</p><div className="text-right mt-4 space-x-2"><CButton onClick={() => onEdit(template)} color="primary" variant="outline"><Edit size={16} className="mr-2"/> Edytuj</CButton><CButton onClick={() => onDelete(template.id)} color="danger" variant="outline"><Trash2 size={16} className="mr-2"/> UsuÒ</CButton></div></CCardBody></CCard>)) : (<CCard><CCardBody><p className="text-center text-gray-500 py-8">Brak szablonÛw. Kliknij "UtwÛrz szablon", aby dodaÊ pierwszy.</p></CCardBody></CCard>)}</div>);
-const SendSmsView = ({ contacts, groups, templates, onSchedule, showToast }) => {
+const TemplatesView = ({ templates, onEdit, onDelete }) => (
+    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+        {templates.length === 0 ? <Card><CardContent><Typography align="center" p={4}>Brak szablon√≥w.</Typography></CardContent></Card> :
+        templates.map(template => (<Card key={template.id}><CardHeader title={template.name} action={<><IconButton onClick={() => onEdit(template)}><Edit /></IconButton><IconButton onClick={() => onDelete(template.id)}><Delete /></IconButton></>} /><CardContent><Typography>"{template.content}"</Typography></CardContent></Card>))}
+    </Box>
+);
+const SendSmsView = ({ contacts, groups, templates, showToast }) => {
     const [recipients, setRecipients] = useState([]);
     const [message, setMessage] = useState('');
-    const [isScheduling, setIsScheduling] = useState(false);
-    const [scheduleDate, setScheduleDate] = useState('');
-    const [scheduleTime, setScheduleTime] = useState('');
-    const allRecipientOptions = useMemo(() => [...contacts.map(c => ({ id: `contact-${c.id}`, label: `${c.firstName} ${c.lastName}`, type: 'contact' })), ...groups.map(g => ({ id: `group-${g.id}`, label: `Grupa: ${g.name}`, type: 'group' }))], [contacts, groups]);
-    const handleRecipientChange = (id) => setRecipients(prev => prev.includes(id) ? prev.filter(rId => rId !== id) : [...prev, id]);
-    const handleSubmit = async (e) => {
-        e.preventDefault();
-        if (recipients.length === 0 || !message) return showToast('Wybierz odbiorcÛw i wpisz treúÊ wiadomoúci.', 'error');
-        if (isScheduling) {
-            if (!scheduleDate || !scheduleTime) return showToast('Ustaw datÍ i godzinÍ wysy≥ki.', 'error');
-            const scheduledAt = new Date(`${scheduleDate}T${scheduleTime}`).toISOString();
-            const success = await onSchedule({ recipients, message, scheduledAt, status: 'pending' });
-            if (success) { setRecipients([]); setMessage(''); setIsScheduling(false); }
-        } else {
-            const operatorId = Math.floor(Math.random() * 9) + 1;
-            const messageId = Date.now();
-            const uniqueMessageId = `${operatorId}${messageId}`;
-            console.log("WYSY£KA SMS:", { recipients, message, uniqueMessageId });
-            showToast(`WiadomoúÊ wys≥ana! ID: ${uniqueMessageId}`, 'success');
-            setRecipients([]);
-            setMessage('');
-        }
-    };
-    return (<CCard><CCardHeader>Nowa wiadomoúÊ SMS</CCardHeader><CCardBody><form onSubmit={handleSubmit} className="space-y-6"><div><label className="block text-sm font-medium text-gray-700 mb-2">Odbiorcy</label><RecipientSelector allRecipients={allRecipientOptions} selected={recipients} onToggle={handleRecipientChange} /></div><div><label className="block text-sm font-medium text-gray-700">TreúÊ wiadomoúci</label><textarea value={message} onChange={(e) => setMessage(e.target.value)} rows="5" className="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500" placeholder="Wpisz treúÊ wiadomoúci..."></textarea></div><div><label className="block text-sm font-medium text-gray-700 mb-2">Uøyj szablonu</label><div className="flex flex-wrap gap-2">{templates.map(t => <CButton key={t.id} onClick={() => setMessage(t.content)} color="secondary" variant="outline">{t.name}</CButton>)}</div></div><div className="space-y-4 pt-4"><div className="flex items-center"><input id="schedule-checkbox" type="checkbox" checked={isScheduling} onChange={(e) => setIsScheduling(e.target.checked)} className="h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500" /><label htmlFor="schedule-checkbox" className="ml-2 block text-sm text-gray-900">Zaplanuj wysy≥kÍ</label></div>{isScheduling && (<div className="grid grid-cols-1 md:grid-cols-2 gap-4 p-4 border rounded-md bg-gray-50"><div><label htmlFor="schedule-date" className="block text-sm font-medium text-gray-700">Data</label><input type="date" id="schedule-date" value={scheduleDate} onChange={(e) => setScheduleDate(e.target.value)} className="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500" min={new Date().toISOString().split('T')[0]} /></div><div><label htmlFor="schedule-time" className="block text-sm font-medium text-gray-700">Godzina</label><input type="time" id="schedule-time" value={scheduleTime} onChange={(e) => setScheduleTime(e.target.value)} className="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500" /></div></div>)}</div><div className="flex justify-end"><CButton type="submit" color="primary" disabled={recipients.length === 0 || !message}>{isScheduling ? <Clock size={18} className="mr-2" /> : <Send size={18} className="mr-2" />}{isScheduling ? 'Zaplanuj wiadomoúÊ' : 'Wyúlij teraz'}</CButton></div></form></CCardBody></CCard>);
-};
-const RecipientSelector = ({ allRecipients, selected, onToggle }) => {
-    const [isOpen, setIsOpen] = useState(false);
-    const getSelectedLabel = () => { if (selected.length === 0) return "Wybierz odbiorcÛw..."; if (selected.length === 1) return allRecipients.find(r => r.id === selected[0])?.label || "1 odbiorca"; return `${selected.length} odbiorcÛw`; };
-    return (<div className="relative"><button type="button" onClick={() => setIsOpen(!isOpen)} className="w-full text-left bg-white border border-gray-300 rounded-md shadow-sm px-3 py-2 flex justify-between items-center"><span>{getSelectedLabel()}</span><ChevronDown size={20} /></button>{isOpen && (<div className="absolute z-10 mt-1 w-full bg-white shadow-lg border rounded-md max-h-60 overflow-auto"><ul className="py-1">{allRecipients.map(recipient => (<li key={recipient.id} onClick={() => onToggle(recipient.id)} className="px-3 py-2 text-sm text-gray-700 hover:bg-gray-100 cursor-pointer flex items-center"><input type="checkbox" readOnly checked={selected.includes(recipient.id)} className="h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500 mr-3" />{recipient.label}</li>))}</ul></div>)}</div>);
+    const allRecipientOptions = useMemo(() => [...contacts.map(c => ({ id: `contact-${c.id}`, label: `${c.firstName} ${c.lastName}` })), ...groups.map(g => ({ id: `group-${g.id}`, label: `Grupa: ${g.name}` }))], [contacts, groups]);
+    const handleSubmit = (e) => { e.preventDefault(); if (recipients.length === 0 || !message) return showToast('Wybierz odbiorc√≥w i wpisz tre≈õƒá wiadomo≈õci.', 'error'); console.log("WYSY≈ÅKA SMS:", { recipients, message }); showToast(`Wiadomo≈õƒá wys≈Çana!`); setMessage(''); setRecipients([]); };
+    return (<Card><CardHeader title="Nowa wiadomo≈õƒá" /><CardContent>
+        <Box component="form" onSubmit={handleSubmit} sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+            <FormControl fullWidth><InputLabel>Odbiorcy</InputLabel><Select multiple value={recipients} onChange={e => setRecipients(e.target.value)} input={<OutlinedInput label="Odbiorcy" />} renderValue={(selected) => (<Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>{selected.map(id => (<Chip key={id} label={allRecipientOptions.find(o => o.id === id)?.label || '...'} />))}</Box>)}>{allRecipientOptions.map(option => (<MenuItem key={option.id} value={option.id}><Checkbox checked={recipients.indexOf(option.id) > -1} />{option.label}</MenuItem>))}</Select></FormControl>
+            <TextField label="Tre≈õƒá wiadomo≈õci" multiline rows={5} value={message} onChange={e => setMessage(e.target.value)} />
+            <Box><Typography variant="body2" mb={1}>U≈ºyj szablonu:</Typography><Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>{templates.map(t => (<Button key={t.id} variant="outlined" onClick={() => setMessage(t.content)}>{t.name}</Button>))}</Box></Box>
+            <Button type="submit" variant="contained" size="large" startIcon={<Send />}>Wy≈õlij teraz</Button>
+        </Box>
+    </CardContent></Card>);
 };
