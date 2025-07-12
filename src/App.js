@@ -7,7 +7,7 @@ import {
     signInWithEmailAndPassword, 
     signOut 
 } from 'firebase/auth';
-import { getFirestore, collection, doc, addDoc, updateDoc, deleteDoc, onSnapshot } from 'firebase/firestore';
+import { getFirestore, collection, doc, addDoc, updateDoc, deleteDoc, onSnapshot, serverTimestamp } from 'firebase/firestore';
 
 // Importowanie komponentów i ikon z MUI (Material-UI)
 import {
@@ -18,7 +18,7 @@ import {
     ThemeProvider, createTheme, CssBaseline, FormControlLabel, Menu, Tooltip
 } from '@mui/material';
 import {
-    Send, Book, Group, Message, Schedule, Add, Edit, Delete, Menu as MenuIcon, Logout, Email, Lock, X as XIcon, Palette
+    Send, Book, Group, Message, Schedule, Add, Edit, Delete, Menu as MenuIcon, Logout, Email, Lock, X as XIcon, Palette, History
 } from '@mui/icons-material';
 
 
@@ -169,6 +169,7 @@ function AppContent({ onThemeChange }) {
     const [groups, setGroups] = useState([]);
     const [templates, setTemplates] = useState([]);
     const [scheduled, setScheduled] = useState([]);
+    const [history, setHistory] = useState([]);
     
     const [isLoading, setIsLoading] = useState(true);
     const [modal, setModal] = useState({ isOpen: false, type: '', data: null });
@@ -184,7 +185,7 @@ function AppContent({ onThemeChange }) {
             setCurrentUser(user);
             setIsLoading(false);
             if (user) {
-                const collections = { contacts: setContacts, groups: setGroups, templates: setTemplates, scheduled: setScheduled };
+                const collections = { contacts: setContacts, groups: setGroups, templates: setTemplates, scheduled: setScheduled, history: setHistory };
                 const unsubscribers = Object.entries(collections).map(([name, setter]) => 
                     onSnapshot(collection(db, 'shared_data', 'data', name), snapshot => {
                         setter(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
@@ -252,16 +253,17 @@ function AppContent({ onThemeChange }) {
     
     const renderView = () => {
         switch (activeView) {
-            case 'send': return <SendSmsView contacts={contacts} groups={groups} templates={templates} showToast={showToast} onSchedule={(data) => handleSaveData('scheduled', data)} />;
+            case 'send': return <SendSmsView contacts={contacts} groups={groups} templates={templates} showToast={showToast} currentUser={currentUser} onSchedule={(data) => handleSaveData('scheduled', data)} />;
             case 'contacts': return <ContactsView data={contacts} onEdit={(c) => openModal('contact', c)} onDelete={(id) => handleDeleteRequest('contacts', id)} />;
             case 'groups': return <GroupsView groups={groups} contacts={contacts} onEdit={(g) => openModal('group', g)} onDelete={(id) => handleDeleteRequest('groups', id)} />;
             case 'templates': return <TemplatesView templates={templates} onEdit={(t) => openModal('template', t)} onDelete={(id) => handleDeleteRequest('templates', id)} />;
             case 'scheduled': return <ScheduledView scheduled={scheduled} contacts={contacts} groups={groups} onDelete={(id) => handleDeleteRequest('scheduled', id)} />;
+            case 'history': return <HistoryView history={history} contacts={contacts} groups={groups} />;
             default: return <Typography>Wybierz opcję z menu.</Typography>;
         }
     };
     
-    const viewTitles = { send: 'Wyślij SMS', contacts: 'Książka adresowa', groups: 'Grupy odbiorców', templates: 'Szablony wiadomości', scheduled: 'Zaplanowane' };
+    const viewTitles = { send: 'Wyślij SMS', contacts: 'Książka adresowa', groups: 'Grupy odbiorców', templates: 'Szablony wiadomości', scheduled: 'Zaplanowane', history: 'Historia' };
 
     return (
         <Box sx={{ display: 'flex' }}>
@@ -300,7 +302,7 @@ function AppContent({ onThemeChange }) {
                 <Toolbar />
                 <List>
                     {Object.keys(viewTitles).map(key => {
-                        const icons = { send: <Send />, contacts: <Book />, groups: <Group />, templates: <Message />, scheduled: <Schedule /> };
+                        const icons = { send: <Send />, contacts: <Book />, groups: <Group />, templates: <Message />, scheduled: <Schedule />, history: <History /> };
                         return (<ListItem key={key} disablePadding sx={{ display: 'block' }}><ListItemButton selected={activeView === key} onClick={() => setActiveView(key)} sx={{ minHeight: 48, justifyContent: 'initial', px: 2.5, '&.Mui-selected': { bgcolor: 'primary.main', color: 'white', '&:hover': { bgcolor: 'primary.dark' } } }}><ListItemIcon sx={{ minWidth: 0, mr: 3, justifyContent: 'center' }}>{icons[key]}</ListItemIcon><ListItemText primary={viewTitles[key]} sx={{ opacity: isSidebarOpen ? 1 : 0, transition: 'opacity 0.2s' }} /></ListItemButton></ListItem>);
                     })}
                 </List>
@@ -376,12 +378,9 @@ const TemplatesView = ({ templates, onEdit, onDelete }) => (
         templates.map(template => (<Card key={template.id}><CardHeader title={template.name} action={<><IconButton onClick={() => onEdit(template)}><Edit /></IconButton><IconButton onClick={() => onDelete(template.id)}><Delete /></IconButton></>} /><CardContent><Typography>"{template.content}"</Typography></CardContent></Card>))}
     </Box>
 );
-const SendSmsView = ({ contacts, groups, templates, showToast, onSchedule }) => {
-    // --- INTEGRACJA SMSAPI ---
-    // Krok 1: Wklej swój token API uzyskany z panelu SMSAPI.pl
+const SendSmsView = ({ contacts, groups, templates, showToast, currentUser, onSchedule }) => {
     const SMSAPI_TOKEN = 'TWOJ_TOKEN_API_Z_PANELU_SMSAPI';
-    // Krok 2: Wpisz nazwę nadawcy, którą zarejestrowałeś w panelu SMSAPI
-    const SENDER_NAME = 'Info'; // Przykładowa nazwa, zmień na swoją
+    const SENDER_NAME = 'Info'; 
 
     const [recipients, setRecipients] = useState([]);
     const [message, setMessage] = useState('');
@@ -408,6 +407,14 @@ const SendSmsView = ({ contacts, groups, templates, showToast, onSchedule }) => 
         return Array.from(phoneNumbers);
     };
 
+    const saveToHistory = async (data) => {
+        try {
+            await addDoc(collection(db, 'shared_data', 'data', 'history'), data);
+        } catch (e) {
+            console.error("Błąd zapisu do historii:", e);
+        }
+    };
+
     const handleRealSend = async () => {
         const numbers = getPhoneNumbers();
         if (numbers.length === 0) return showToast('Brak prawidłowych numerów do wysyłki.', 'error');
@@ -420,23 +427,23 @@ const SendSmsView = ({ contacts, groups, templates, showToast, onSchedule }) => 
         try {
             const response = await fetch('https://api.smsapi.pl/sms.do', {
                 method: 'POST',
-                headers: {
-                    'Authorization': `Bearer ${SMSAPI_TOKEN}`,
-                    'Content-Type': 'application/x-www-form-urlencoded'
-                },
+                headers: { 'Authorization': `Bearer ${SMSAPI_TOKEN}` },
                 body: formData
             });
 
-            const result = await response.text(); // API SMSAPI często zwraca tekst
+            const result = await response.text();
             if (response.ok && !result.startsWith('ERROR')) {
                 showToast(`Wiadomość wysłana pomyślnie!`, 'success');
+                saveToHistory({ sender: currentUser.email, recipients, message, sentAt: serverTimestamp(), status: 'success' });
                 setRecipients([]);
                 setMessage('');
             } else {
                 showToast(`Błąd wysyłki: ${result}`, 'error');
+                saveToHistory({ sender: currentUser.email, recipients, message, sentAt: serverTimestamp(), status: 'failure', error: result });
             }
         } catch (error) {
             showToast('Błąd sieciowy podczas wysyłania SMS.', 'error');
+            saveToHistory({ sender: currentUser.email, recipients, message, sentAt: serverTimestamp(), status: 'failure', error: String(error) });
         }
     };
 
@@ -446,10 +453,10 @@ const SendSmsView = ({ contacts, groups, templates, showToast, onSchedule }) => 
         
         if (isScheduling) {
             if (!scheduleDate || !scheduleTime) return showToast('Ustaw datę i godzinę wysyłki.', 'error');
-            const scheduledAt = new Date(`${scheduleDate}T${scheduleTime}`).toISOString();
-            if (new Date(scheduledAt) < new Date()) return showToast('Nie można zaplanować wysyłki w przeszłości.', 'error');
+            const scheduledAt = new Date(`${scheduleDate}T${scheduleTime}`);
+            if (scheduledAt < new Date()) return showToast('Nie można zaplanować wysyłki w przeszłości.', 'error');
             
-            const success = await onSchedule({ recipients, message, scheduledAt, status: 'pending' });
+            const success = await onSchedule({ recipients, message, scheduledAt: scheduledAt.toISOString(), status: 'scheduled' });
             if (success) {
                 setRecipients([]);
                 setMessage('');
@@ -467,16 +474,8 @@ const SendSmsView = ({ contacts, groups, templates, showToast, onSchedule }) => 
             <FormControl fullWidth><InputLabel>Odbiorcy</InputLabel><Select multiple value={recipients} onChange={e => setRecipients(e.target.value)} input={<OutlinedInput label="Odbiorcy" />} renderValue={(selected) => (<Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>{selected.map(id => (<Chip key={id} label={allRecipientOptions.find(o => o.id === id)?.label || '...'} />))}</Box>)}>{allRecipientOptions.map(option => (<MenuItem key={option.id} value={option.id}><Checkbox checked={recipients.indexOf(option.id) > -1} />{option.label}</MenuItem>))}</Select></FormControl>
             <TextField label="Treść wiadomości" multiline rows={5} value={message} onChange={e => setMessage(e.target.value)} />
             <Box><Typography variant="body2" mb={1}>Użyj szablonu:</Typography><Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>{templates.map(t => (<Button key={t.id} variant="outlined" onClick={() => setMessage(t.content)}>{t.name}</Button>))}</Box></Box>
-            
             <FormControlLabel control={<Checkbox checked={isScheduling} onChange={(e) => setIsScheduling(e.target.checked)} />} label="Zaplanuj wysyłkę" />
-            
-            {isScheduling && (
-                <Box sx={{ display: 'flex', gap: 2, alignItems: 'center' }}>
-                    <TextField label="Data wysyłki" type="date" value={scheduleDate} onChange={e => setScheduleDate(e.target.value)} InputLabelProps={{ shrink: true }} sx={{ flex: 1 }} />
-                    <TextField label="Godzina wysyłki" type="time" value={scheduleTime} onChange={e => setScheduleTime(e.target.value)} InputLabelProps={{ shrink: true }} sx={{ flex: 1 }} />
-                </Box>
-            )}
-
+            {isScheduling && (<Box sx={{ display: 'flex', gap: 2, alignItems: 'center' }}><TextField label="Data wysyłki" type="date" value={scheduleDate} onChange={e => setScheduleDate(e.target.value)} InputLabelProps={{ shrink: true }} sx={{ flex: 1 }} /><TextField label="Godzina wysyłki" type="time" value={scheduleTime} onChange={e => setScheduleTime(e.target.value)} InputLabelProps={{ shrink: true }} sx={{ flex: 1 }} /></Box>)}
             <Button type="submit" variant="contained" size="large" startIcon={isScheduling ? <Schedule /> : <Send />}>{isScheduling ? 'Zaplanuj wiadomość' : 'Wyślij teraz'}</Button>
         </Box>
     </CardContent></Card>);
@@ -487,11 +486,11 @@ const ScheduledView = ({ scheduled, contacts, groups, onDelete }) => {
         return recipientIds.map(id => {
             if (id.startsWith('contact-')) {
                 const contact = contacts.find(c => c.id === id.replace('contact-', ''));
-                return contact ? `${contact.firstName} ${contact.lastName}` : 'Nieznany kontakt';
+                return contact ? `${contact.firstName} ${contact.lastName}` : 'Kontakt usunięty';
             }
             if (id.startsWith('group-')) {
                 const group = groups.find(g => g.id === id.replace('group-', ''));
-                return group ? `Grupa: ${group.name}` : 'Nieznana grupa';
+                return group ? `Grupa: ${group.name}` : 'Grupa usunięta';
             }
             return 'Nieznany odbiorca';
         }).join(', ');
@@ -512,5 +511,82 @@ const ScheduledView = ({ scheduled, contacts, groups, onDelete }) => {
                 </table>
             </Box>}
         </CardContent></Card>
+    );
+};
+
+const HistoryView = ({ history, contacts, groups }) => {
+    const [filterDate, setFilterDate] = useState('');
+
+    const getRecipientNames = (recipientIds = []) => {
+        return recipientIds.map(id => {
+            if (id.startsWith('contact-')) {
+                const contact = contacts.find(c => c.id === id.replace('contact-', ''));
+                return contact ? `${contact.firstName} ${contact.lastName}` : 'Kontakt usunięty';
+            }
+            if (id.startsWith('group-')) {
+                const group = groups.find(g => g.id === id.replace('group-', ''));
+                return group ? `Grupa: ${group.name}` : 'Grupa usunięta';
+            }
+            return 'Nieznany odbiorca';
+        }).join(', ');
+    };
+
+    const filteredAndSortedHistory = useMemo(() => {
+        return history
+            .filter(item => {
+                if (!filterDate) return true;
+                const itemDateObj = item.sentAt?.toDate() || item.scheduledAt?.toDate();
+                if (!itemDateObj) return false;
+                const itemDate = itemDateObj.toISOString().split('T')[0];
+                return itemDate === filterDate;
+            })
+            .sort((a, b) => (b.sentAt?.seconds || b.scheduledAt?.seconds) - (a.sentAt?.seconds || a.scheduledAt?.seconds));
+    }, [history, filterDate]);
+
+    const statusChip = (status) => {
+        const config = {
+            success: { label: 'Sukces', color: 'success' },
+            failure: { label: 'Porażka', color: 'error' },
+            scheduled: { label: 'Zaplanowano', color: 'info' }
+        };
+        const { label, color } = config[status] || { label: status, color: 'default' };
+        return <Chip label={label} color={color} size="small" />;
+    };
+
+    return (
+        <Card>
+            <CardHeader 
+                title="Historia wysyłek"
+                action={
+                    <TextField
+                        label="Filtruj po dacie"
+                        type="date"
+                        value={filterDate}
+                        onChange={e => setFilterDate(e.target.value)}
+                        InputLabelProps={{ shrink: true }}
+                        size="small"
+                    />
+                }
+            />
+            <CardContent>
+                {filteredAndSortedHistory.length === 0 ? <Typography align="center" p={4}>Brak historii dla wybranego dnia.</Typography> :
+                <Box sx={{ overflowX: 'auto' }}>
+                    <table style={{width: "100%", borderCollapse: "collapse"}}>
+                        <thead><tr>
+                            <th style={{padding: "8px", textAlign: "left"}}>Data</th>
+                            <th style={{padding: "8px", textAlign: "left"}}>Wysłane przez</th>
+                            <th style={{padding: "8px", textAlign: "left"}}>Odbiorcy</th>
+                            <th style={{padding: "8px", textAlign: "left"}}>Status</th>
+                        </tr></thead>
+                        <tbody>{filteredAndSortedHistory.map(item => (<tr key={item.id} style={{borderTop: "1px solid #eee"}}>
+                            <td style={{padding: "8px"}}>{(item.sentAt?.toDate() || new Date(item.scheduledAt)).toLocaleString('pl-PL')}</td>
+                            <td style={{padding: "8px"}}>{item.sender}</td>
+                            <td style={{padding: "8px"}}>{getRecipientNames(item.recipients)}</td>
+                            <td style={{padding: "8px"}}>{statusChip(item.status)}</td>
+                        </tr>))}</tbody>
+                    </table>
+                </Box>}
+            </CardContent>
+        </Card>
     );
 };
